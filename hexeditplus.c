@@ -1,13 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 /* --- Global Variables --- */
 char debug_mode = 0;
+char display_mode = 0;   // 0 = hex, 1 = decimal
 char file_name[128];
 int unit_size = 1;
 unsigned char mem_buf[10000];
 size_t mem_count = 0;
+
 
 /* --- Formatting Arrays (from the prompt) --- */
 static char* hex_formats[] = {"%#hhx\n", "%#hx\n", "No such unit", "%#x\n"};
@@ -67,40 +70,175 @@ void set_unit_size() {
 }
 // Stub function for later implementation
 void load_into_memory() {
-    printf("Not implemented yet\n");
+    if (file_name[0] == '\0') {
+        printf("Error: file name is empty\n");
+        return;
+    }
+    FILE *fp = fopen(file_name, "rb");
+    if (!fp) {
+        printf("Error: cannot open file %s\n", file_name);
+        return;
+    }
+
+    char input[128];
+    unsigned int location;
+    int length;
+
+    // flush leftover newline from previous scanf
+    int c; while ((c = getchar()) != '\n' && c != EOF);
+
+    printf("Please enter <location> <length>\n");
+    fgets(input, sizeof(input), stdin);
+    if (sscanf(input, "%x %d", &location, &length) != 2) {
+        printf("Invalid input\n");
+        fclose(fp);
+        return;
+    }
+
+
+    if (debug_mode) {
+        fprintf(stderr, "Debug: file_name=%s, location=0x%X, length=%d\n",
+                file_name, location, length);
+    }
+    if ((size_t)(length * unit_size) > sizeof(mem_buf)) {
+        printf("Error: too many bytes to load\n");
+        fclose(fp);
+        return;
+    }
+
+    fseek(fp, location, SEEK_SET);
+    mem_count = fread(mem_buf, unit_size, length, fp);
+    
+    fclose(fp);
+
+    printf("Loaded %zu units into memory\n", mem_count);
 }
 
-// Stub function
+
 void toggle_display_mode() {
-    printf("Not implemented yet\n");
+    if (display_mode == 0) {
+        display_mode = 1;
+        printf("Decimal display flag now on, decimal representation\n");
+    } else {
+        display_mode = 0;
+        printf("Decimal display flag now off, hexadecimal representation\n");
+    }
 }
+
 
 // Special Stub: Implements the printing exercise requested in prompt
 void memory_display() {
-    printf("Not implemented yet\n");
-    
-    // Exercise logic: Print 0x5555 using current unit size
-    unsigned int val = 0x5555;
-      // Note: unit_size is 1, 2, or 4. Arrays are 0-indexed.
-    // We use (unit_size - 1) to access index 0, 1, or 3.
-    // However, index 2 corresponds to size 3 (invalid), so we must be careful.
-    // But since set_unit_size only allows 1, 2, 4, we assume valid input here.
-    
-    printf("Decimal: ");
-    printf(dec_formats[unit_size - 1], val);
-    
-    printf("Hexadecimal: ");
-    printf(hex_formats[unit_size - 1], val);
+    char input[128];
+    unsigned int address;
+    int length;
+
+    // flush leftover newline from previous menu choice
+    int c; while ((c = getchar()) != '\n' && c != EOF);
+
+    printf("Enter address and length\n> ");
+    fgets(input, sizeof(input), stdin);
+
+    if (sscanf(input, "%x %d", &address, &length) != 2) {
+        printf("Invalid input\n");
+        return;
+    }
+    unsigned char *ptr;
+    if (address == 0) {
+        ptr = mem_buf;
+    } else {
+        ptr = mem_buf + address; 
+    }
+    for (int i = 0; i < length; i++) {
+        unsigned int val = 0;
+        if (unit_size == 1) val = *(unsigned char*)(ptr + i*unit_size);
+        else if (unit_size == 2) val = *(unsigned short*)(ptr + i*unit_size);
+        else if (unit_size == 4) val = *(unsigned int*)(ptr + i*unit_size);
+        if (display_mode) { // decimal
+        printf(dec_formats[unit_size-1], val);
+    } else { // hex
+        printf(hex_formats[unit_size-1], val);
+    }
+}
 }
 // Stub function
 void save_into_file() {
-    printf("Not implemented yet\n");
+    char input[128];
+    unsigned int address;
+    int length;
+    unsigned int target_location;
+
+    // flush leftover newline from previous menu choice
+    int c; while ((c = getchar()) != '\n' && c != EOF);
+
+    printf("Please enter <source-address> <target-location> <length>\n> ");
+    fgets(input, sizeof(input), stdin);
+
+    if (sscanf(input, "%x %x %d", &address, &target_location, &length) != 3) {
+        printf("Invalid input\n");
+        return;
+    }
+    if(file_name[0]=='\0'){
+        printf("filename empty");
+        return;
+    }
+    FILE *fp = fopen(file_name, "r+b");
+    if (!fp) {
+        printf("Error: cannot open file %s\n", file_name);
+        return;
+    }
+    fseek(fp, 0, SEEK_END);
+    long file_size = ftell(fp);
+    if (target_location > file_size) {
+        printf("Error: target location is past end of file\n");
+        fclose(fp);
+        return;
+    }
+
+    fseek(fp,target_location,SEEK_SET);
+    unsigned char *ptr;
+    if (address == 0) {
+        ptr = mem_buf;
+    } else {
+        ptr = mem_buf + address; 
+    }
+
+    for (int i = 0; i < length; i++) {
+        fwrite(ptr + i*unit_size, unit_size, 1, fp);
+    }
 }
 
 // Stub function
 void memory_modify() {
-    printf("Not implemented yet\n");
+    char input[128];
+    unsigned int location;
+    unsigned int val;
+    // flush leftover newline from previous menu choice
+    int c; while ((c = getchar()) != '\n' && c != EOF);
+    printf("Please enter <location> <val>\n> ");
+    fgets(input, sizeof(input), stdin);
+    if (sscanf(input, "%x %x", &location, &val) != 2) {
+        printf("Invalid input\n");
+        return;
+    }
+    if(debug_mode==1){
+        printf("Debug: location = 0x%x, val = 0x%x\n", location, val);
+    }
+    if (location + unit_size > sizeof(mem_buf)) {
+        printf("Error: location out of bounds\n");
+        return;
+    }
+
+    if (unit_size == 1) {
+        mem_buf[location] = (unsigned char)val;
+    } else if (unit_size == 2) {
+        *(unsigned short*)(mem_buf + location) = (unsigned short)val;
+    } else if (unit_size == 4) {
+        *(unsigned int*)(mem_buf + location) = val;
+    } else {
+        printf("Error: invalid unit size\n");
+    }
 }
+
 
 void quit() {
     if (debug_mode) {
